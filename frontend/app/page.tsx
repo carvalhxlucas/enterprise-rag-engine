@@ -6,6 +6,21 @@ type PersonaOption = "sarcastic" | "technical";
 
 type ChatMessageRole = "user" | "assistant";
 
+type ChatConfig = {
+  persona: PersonaOption;
+  temperature: number;
+  use_hybrid_search: boolean;
+};
+
+type ChatRequest = {
+  message: string;
+  history: {
+    role: ChatMessageRole;
+    content: string;
+  }[];
+  config: ChatConfig;
+};
+
 type ChatMessage = {
   id: string;
   role: ChatMessageRole;
@@ -127,10 +142,11 @@ export default function Page() {
     };
   }, [uploadTaskId]);
 
-  function handleSend() {
+  async function handleSend() {
     if (!inputValue.trim()) {
       return;
     }
+    const previousMessages = messages;
     const idBase = String(Date.now());
     const userMessage: ChatMessage = {
       id: `${idBase}-user`,
@@ -140,19 +156,120 @@ export default function Page() {
     const assistantMessage: ChatMessage = {
       id: `${idBase}-assistant`,
       role: "assistant",
-      content:
-        persona === "sarcastic"
-          ? "Sample sarcastic answer with citation [1]."
-          : "Sample highly technical answer with citation [1].",
-      citationIds: ["1"],
-      costUsd: 0.01,
-      latencyMs: 1500,
+      content: "",
     };
     setMessages((previous) => [...previous, userMessage, assistantMessage]);
     setInputValue("");
-    setSelectedCitationId("1");
-    setLatestCostUsd(assistantMessage.costUsd ?? null);
-    setLatestLatencyMs(assistantMessage.latencyMs ?? null);
+    setSelectedCitationId(null);
+    setLatestCostUsd(null);
+    setLatestLatencyMs(null);
+
+    const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+
+    const historyForRequest: ChatRequest["history"] = previousMessages.map((message) => ({
+      role: message.role,
+      content: message.content,
+    }));
+
+    const requestBody: ChatRequest = {
+      message: userMessage.content,
+      history: historyForRequest,
+      config: {
+        persona,
+        temperature: 0.7,
+        use_hybrid_search: true,
+      },
+    };
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/v1/chat/stream`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "text/event-stream",
+          "X-User-ID": "demo-user-1",
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!response.ok || !response.body) {
+        throw new Error("Chat request failed");
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let fullContent = "";
+
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) {
+          break;
+        }
+        buffer += decoder.decode(value, { stream: true });
+
+        let separatorIndex = buffer.indexOf("\n\n");
+        while (separatorIndex !== -1) {
+          const rawEvent = buffer.slice(0, separatorIndex);
+          buffer = buffer.slice(separatorIndex + 2);
+
+          const lines = rawEvent.split("\n");
+          let eventType = "message";
+          let dataLine = "";
+
+          for (const line of lines) {
+            if (line.startsWith("event:")) {
+              eventType = line.slice("event:".length).trim();
+            } else if (line.startsWith("data:")) {
+              const valuePart = line.slice("data:".length).trim();
+              dataLine = dataLine ? `${dataLine}${valuePart}` : valuePart;
+            }
+          }
+
+          if (!dataLine) {
+            separatorIndex = buffer.indexOf("\n\n");
+            continue;
+          }
+
+          if (eventType === "end") {
+            separatorIndex = buffer.indexOf("\n\n");
+            continue;
+          }
+
+          try {
+            const payload = JSON.parse(dataLine) as { content?: string };
+            if (typeof payload.content === "string") {
+              fullContent += payload.content;
+              const updatedContent = fullContent;
+              setMessages((previous) =>
+                previous.map((message) =>
+                  message.id === assistantMessage.id
+                    ? {
+                        ...message,
+                        content: updatedContent,
+                      }
+                    : message,
+                ),
+              );
+            }
+          } catch {
+          }
+
+          separatorIndex = buffer.indexOf("\n\n");
+        }
+      }
+    } catch {
+      setMessages((previous) =>
+        previous.map((message) =>
+          message.id === assistantMessage.id
+            ? {
+                ...message,
+                content: "An error occurred while generating the answer.",
+              }
+            : message,
+        ),
+      );
+    }
   }
 
   function handleCitationClick(citationId: string) {
