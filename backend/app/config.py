@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     allowed_origins: List[AnyHttpUrl] = []
     allowed_hosts: List[str] = ["*"]
 
+    storage_path: str = "./storage"
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

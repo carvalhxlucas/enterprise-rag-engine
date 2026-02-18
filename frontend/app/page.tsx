@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type PersonaOption = "sarcastic" | "technical";
 
@@ -23,6 +23,9 @@ export default function Page() {
   const [inputValue, setInputValue] = useState("");
   const [uploadStage, setUploadStage] = useState<UploadStage>("idle");
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadTaskId, setUploadTaskId] = useState<string | null>(null);
+  const [uploadStep, setUploadStep] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [selectedCitationId, setSelectedCitationId] = useState<string | null>(null);
   const [latestCostUsd, setLatestCostUsd] = useState<number | null>(null);
   const [latestLatencyMs, setLatestLatencyMs] = useState<number | null>(null);
@@ -31,26 +34,98 @@ export default function Page() {
     setPersona(value);
   }
 
-  function simulateUpload(fileName: string) {
-    setUploadStage("uploading");
-    setUploadProgress(15);
-    setTimeout(() => {
-      setUploadStage("processing");
-      setUploadProgress(55);
-      setTimeout(() => {
-        setUploadStage("completed");
-        setUploadProgress(100);
-      }, 800);
-    }, 800);
-  }
-
-  function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) {
       return;
     }
-    simulateUpload(file.name);
+    const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+    const formData = new FormData();
+    formData.append("file", file);
+
+    setUploadError(null);
+    setUploadStage("uploading");
+    setUploadProgress(5);
+    setUploadStep("uploading");
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/v1/ingest/upload`, {
+        method: "POST",
+        headers: {
+          "X-User-ID": "demo-user-1",
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        const message = data && typeof data.detail === "string" ? data.detail : "Upload failed";
+        setUploadError(message);
+        setUploadStage("idle");
+        setUploadProgress(0);
+        setUploadStep(null);
+        return;
+      }
+
+      const data = (await response.json()) as { task_id: string };
+      setUploadTaskId(data.task_id);
+      setUploadStage("processing");
+      setUploadProgress(10);
+      setUploadStep("pending");
+    } catch (error) {
+      setUploadError("Network error during upload");
+      setUploadStage("idle");
+      setUploadProgress(0);
+      setUploadStep(null);
+    }
   }
+
+  useEffect(() => {
+    if (!uploadTaskId) {
+      return;
+    }
+    let isCancelled = false;
+    const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+
+    async function fetchStatus() {
+      try {
+        const response = await fetch(`${apiBaseUrl}/api/v1/ingest/status/${uploadTaskId}`);
+        if (!response.ok) {
+          return;
+        }
+        const data = (await response.json()) as {
+          status: string;
+          step: string | null;
+          progress: number;
+          error: string | null;
+        };
+        if (isCancelled) {
+          return;
+        }
+        setUploadStep(data.step);
+        setUploadProgress(data.progress);
+        if (data.status === "processing" || data.status === "pending") {
+          setUploadStage("processing");
+        } else if (data.status === "completed") {
+          setUploadStage("completed");
+          setUploadTaskId(null);
+        } else if (data.status === "failed") {
+          setUploadStage("idle");
+          setUploadTaskId(null);
+          setUploadError(data.error ?? "Ingestion failed");
+        }
+      } catch {
+      }
+    }
+
+    fetchStatus();
+    const interval = setInterval(fetchStatus, 2000);
+
+    return () => {
+      isCancelled = true;
+      clearInterval(interval);
+    };
+  }, [uploadTaskId]);
 
   function handleSend() {
     if (!inputValue.trim()) {
@@ -67,8 +142,8 @@ export default function Page() {
       role: "assistant",
       content:
         persona === "sarcastic"
-          ? "Resposta sarcástica de exemplo com citação [1]."
-          : "Resposta técnica de exemplo com citação [1].",
+          ? "Sample sarcastic answer with citation [1]."
+          : "Sample highly technical answer with citation [1].",
       citationIds: ["1"],
       costUsd: 0.01,
       latencyMs: 1500,
@@ -139,14 +214,14 @@ export default function Page() {
               Upload
             </span>
             <p className="mt-1 text-xs text-slate-400">
-              Envie um PDF técnico complexo para demonstrar a ingestão.
+              Upload a complex technical PDF to demonstrate ingestion.
             </p>
             <label className="mt-4 flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-slate-700 bg-slate-900/40 px-4 py-5 text-center text-xs text-slate-300 hover:border-emerald-500 hover:bg-slate-900/70">
               <span className="text-sm font-medium text-slate-100">
-                Solte o PDF aqui ou clique para selecionar
+                Drop the PDF here or click to select
               </span>
               <span className="mt-1 text-[11px] text-slate-500">
-                Suporte a PDF, DOCX, TXT
+                Supports PDF, DOCX, TXT
               </span>
               <input
                 type="file"
@@ -159,10 +234,10 @@ export default function Page() {
               <div className="flex items-center justify-between text-[11px] uppercase tracking-wide text-slate-500">
                 <span>Ingestion</span>
                 <span>
-                  {uploadStage === "idle" && "Aguardando arquivo"}
-                  {uploadStage === "uploading" && "Upload"}
-                  {uploadStage === "processing" && "Chunking / Embedding"}
-                  {uploadStage === "completed" && "Concluído"}
+                  {uploadStage === "idle" && "Waiting for file"}
+                  {uploadStage === "uploading" && "Uploading"}
+                  {uploadStage === "processing" && (uploadStep ?? "Processing")}
+                  {uploadStage === "completed" && "Completed"}
                 </span>
               </div>
               <div className="h-2 w-full overflow-hidden rounded-full bg-slate-900">
@@ -175,6 +250,11 @@ export default function Page() {
                 <span>Dense + Sparse Index</span>
                 <span>RBAC Scope: user_id</span>
               </div>
+              {uploadError && (
+                <div className="text-[11px] text-red-400">
+                  {uploadError}
+                </div>
+              )}
             </div>
           </div>
           <div className="flex flex-1 flex-col justify-between px-4 py-4 text-xs text-slate-300">
@@ -183,23 +263,23 @@ export default function Page() {
                 Live Config
               </span>
               <p className="mt-1 text-xs text-slate-400">
-                Persona controla o prompt orquestrado pelo grafo.
+                Persona controls the prompt orchestrated by the graph.
               </p>
               <div className="mt-3 space-y-1 rounded-xl border border-slate-800 bg-slate-900/40 px-3 py-2">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] text-slate-400">Persona</span>
                   <span className="text-[11px] font-medium text-emerald-400">
-                    {persona === "sarcastic" ? "Sarcástica" : "Extremamente técnica"}
+                    {persona === "sarcastic" ? "Sarcastic" : "Extremely technical"}
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-500">
-                  Esta informação será enviada como instrução para o LLM.
+                  This information will be sent as an instruction to the LLM.
                 </p>
               </div>
             </div>
             <div className="mt-4 rounded-xl border border-slate-800 bg-slate-900/40 px-3 py-2">
               <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                Última interação
+                Last interaction
               </span>
               <div className="mt-2 space-y-1 text-[11px] text-slate-300">
                 <div className="flex justify-between">
@@ -226,7 +306,7 @@ export default function Page() {
                 Chat
               </span>
               <span className="text-xs text-slate-500">
-                Pergunte qualquer coisa sobre o seu PDF técnico.
+                Ask anything about your technical PDF.
               </span>
             </div>
             <div className="flex items-center gap-3 text-[11px] text-slate-400">
@@ -239,9 +319,9 @@ export default function Page() {
           <div className="flex-1 space-y-4 overflow-y-auto px-6 py-4">
             {messages.length === 0 && (
               <div className="mt-16 text-center text-sm text-slate-500">
-                <p>Envie um PDF, escolha uma persona e faça uma pergunta difícil.</p>
+                <p>Upload a PDF, choose a persona, and ask a hard question.</p>
                 <p className="mt-1 text-xs text-slate-600">
-                  A resposta aparecerá aqui, com citações clicáveis.
+                  The answer will appear here, with clickable citations.
                 </p>
               </div>
             )}
@@ -292,7 +372,7 @@ export default function Page() {
                 <textarea
                   value={inputValue}
                   onChange={(event) => setInputValue(event.target.value)}
-                  placeholder="Pergunte algo específico sobre o documento. Ex: 'Explique o algoritmo de consenso descrito na seção 4.'"
+                  placeholder="Ask something specific about the document. For example: 'Explain the consensus algorithm described in section 4.'"
                   rows={2}
                   className="h-16 w-full resize-none bg-transparent text-sm text-slate-50 outline-none placeholder:text-slate-500"
                 />
@@ -303,12 +383,12 @@ export default function Page() {
                 className="inline-flex h-10 items-center justify-center rounded-full bg-emerald-500 px-6 text-sm font-semibold text-slate-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
                 disabled={!inputValue.trim()}
               >
-                Perguntar
+                Ask
               </button>
             </div>
             <div className="mt-2 flex justify-between text-[11px] text-slate-500">
-              <span>Respostas são instrumentadas com Langfuse para métricas de custo e latência.</span>
-              <span>Streaming e RAG real serão conectados ao backend.</span>
+              <span>Responses are instrumented with Langfuse for cost and latency metrics.</span>
+              <span>Streaming and the real RAG graph will be wired to the backend.</span>
             </div>
           </div>
         </section>
@@ -321,7 +401,7 @@ export default function Page() {
                   Document Viewer
                 </span>
                 <span className="text-xs text-slate-500">
-                  Clique em uma citação para navegar até o trecho relevante.
+                  Click a citation to navigate to the relevant passage.
                 </span>
               </div>
               <div className="rounded-full border border-slate-800 bg-slate-900/70 px-3 py-1 text-[11px] text-slate-300">
@@ -333,9 +413,9 @@ export default function Page() {
           <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4 text-xs text-slate-300">
             {selectedCitationId == null && (
               <div className="mt-16 text-center text-slate-500">
-                <p>Clique em uma citação [1], [2], [3] na resposta do modelo.</p>
+                <p>Click a citation [1], [2], [3] in the model answer.</p>
                 <p className="mt-1 text-[11px] text-slate-600">
-                  Aqui você verá o PDF aberto, com o texto usado pelo RAG em destaque.
+                  Here you will see the PDF opened, with the text used by RAG highlighted.
                 </p>
               </div>
             )}
@@ -347,8 +427,8 @@ export default function Page() {
                     <span>Page 12</span>
                   </div>
                   <p className="mt-2 text-xs text-emerald-100">
-                    Este bloco simula o trecho exato do PDF usado como contexto pelo grafo RAG,
-                    com realce visual para demonstrar o alinhamento entre resposta e fonte.
+                    This block simulates the exact PDF passage used as context by the RAG graph,
+                    with visual highlight to demonstrate alignment between answer and source.
                   </p>
                 </div>
                 <div className="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2">
@@ -370,7 +450,7 @@ export default function Page() {
                     </div>
                     <div className="flex justify-between">
                       <span>Tokens in/out</span>
-                      <span>simulado</span>
+                      <span>simulated</span>
                     </div>
                   </div>
                 </div>

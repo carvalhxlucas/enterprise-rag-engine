@@ -1,6 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
 from app.config import get_settings
+from app.db.models import Base
 
 
 settings = get_settings()
@@ -17,5 +18,5 @@ async def get_db_session() -> AsyncSession:
 
 async def init_db() -> None:
     async with engine.begin() as connection:
-        await connection.run_sync(lambda _: None)
+        await connection.run_sync(Base.metadata.create_all)
 

@@ -1,10 +1,6 @@
-from fastapi import Depends
-from fastapi.security import OAuth2PasswordBearer
+from fastapi import Depends, Header
 
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
-
-
-async def get_current_user_id(token: str = Depends(oauth2_scheme)) -> str:
-    return token
+async def get_current_user_id(x_user_id: str = Header(..., alias="X-User-ID")) -> str:
+    return x_user_id
 
