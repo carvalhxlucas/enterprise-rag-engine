@@ -287,16 +287,16 @@ export default function Page() {
             Observability-first RAG Workbench
           </span>
         </div>
-        <div className="flex items-center gap-4 text-xs text-slate-400">
-          <div className="flex flex-col items-end">
-            <span className="font-medium text-slate-200">Persona</span>
-            <div className="mt-1 inline-flex gap-1 rounded-full bg-slate-900 p-1">
+        <div className="flex items-center gap-6 text-xs text-slate-400">
+          <div className="flex items-center gap-3">
+            <span className="shrink-0 font-medium text-slate-200">Persona</span>
+            <div className="inline-flex gap-0.5 rounded-full bg-slate-900 p-1">
               <button
                 type="button"
                 className={
                   persona === "sarcastic"
-                    ? "rounded-full bg-emerald-500 px-3 py-1 text-xs font-semibold text-slate-950"
-                    : "rounded-full px-3 py-1 text-xs text-slate-300 hover:bg-slate-800"
+                    ? "rounded-full bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-slate-950"
+                    : "rounded-full px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800"
                 }
                 onClick={() => handlePersonaChange("sarcastic")}
               >
@@ -306,8 +306,8 @@ export default function Page() {
                 type="button"
                 className={
                   persona === "technical"
-                    ? "rounded-full bg-emerald-500 px-3 py-1 text-xs font-semibold text-slate-950"
-                    : "rounded-full px-3 py-1 text-xs text-slate-300 hover:bg-slate-800"
+                    ? "rounded-full bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-slate-950"
+                    : "rounded-full px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800"
                 }
                 onClick={() => handlePersonaChange("technical")}
               >
@@ -315,8 +315,8 @@ export default function Page() {
               </button>
             </div>
           </div>
-          <div className="hidden items-center gap-2 rounded-full border border-slate-800 bg-slate-900/60 px-3 py-1 md:flex">
-            <span className="h-2 w-2 rounded-full bg-emerald-400" />
+          <div className="hidden items-center gap-2 rounded-full border border-slate-800 bg-slate-900/60 px-3 py-1.5 md:flex">
+            <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-400" />
             <span className="text-[11px] uppercase tracking-wide">
               Live Evaluation Enabled
             </span>
