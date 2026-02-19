@@ -26,20 +26,20 @@ class Settings(BaseSettings):
     langfuse_secret_key: str | None = None
     langfuse_host: AnyHttpUrl | None = None
 
-    _allowed_origins_raw: str = Field(default="", validation_alias="ALLOWED_ORIGINS")
-    _allowed_hosts_raw: str = Field(default="*", validation_alias="ALLOWED_HOSTS")
+    allowed_origins_raw: str = Field(default="", validation_alias="ALLOWED_ORIGINS")
+    allowed_hosts_raw: str = Field(default="*", validation_alias="ALLOWED_HOSTS")
 
     storage_path: str = "./storage"
 
     @computed_field
     @property
     def allowed_origins(self) -> List[AnyHttpUrl]:
-        return [AnyHttpUrl(u.strip()) for u in self._allowed_origins_raw.split(",") if u.strip()]
+        return [AnyHttpUrl(u.strip()) for u in self.allowed_origins_raw.split(",") if u.strip()]
 
     @computed_field
     @property
     def allowed_hosts(self) -> List[str]:
-        parts = [h.strip() for h in self._allowed_hosts_raw.split(",") if h.strip()]
+        parts = [h.strip() for h in self.allowed_hosts_raw.split(",") if h.strip()]
         return parts if parts else ["*"]
 
     class Config:

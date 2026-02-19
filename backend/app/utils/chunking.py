@@ -5,6 +5,8 @@ def split_text_into_chunks(text: str, chunk_size: int, chunk_overlap: int) -> Li
     if not text:
         return []
     normalized = " ".join(text.split())
+    if not normalized:
+        return []
     if len(normalized) <= chunk_size:
         return [normalized]
     chunks: List[str] = []
