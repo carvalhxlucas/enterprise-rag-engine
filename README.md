@@ -2,6 +2,9 @@
 
 A production-ready **Retrieval-Augmented Generation (RAG)** application that lets users upload documents (PDF, DOCX, TXT), ingest them into a vector store, and chat with an AI assistant over their content. The system uses OpenAI for embeddings and chat, Qdrant for vector search, PostgreSQL for document metadata, and Celery for async ingestion.
 
+<img width="1916" height="896" alt="enterprise-rag-engine" src="https://github.com/user-attachments/assets/17f8e1ab-653c-4d86-8bd8-8443c5cf1e8f" />
+
+
 ---
 
 ## Table of Contents
