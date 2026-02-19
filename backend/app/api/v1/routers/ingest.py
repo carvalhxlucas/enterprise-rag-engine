@@ -31,7 +31,14 @@ async def upload_document(
             detail="Filename is required",
         )
 
-    file_content = await file.read()
+    try:
+        file_content = await file.read()
+    except Exception as e:
+        logger.exception("Failed to read upload body: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Failed to read file content",
+        )
 
     try:
         mime_type = validate_mime_type(file_content, file.filename)
@@ -44,11 +51,17 @@ async def upload_document(
             detail=f"MIME validation failed: {str(e)}",
         )
 
-    storage_service = StorageService()
-    saved_path = storage_service.save_file(file_content, file.filename, user_id)
+    try:
+        storage_service = StorageService()
+        saved_path = storage_service.save_file(file_content, file.filename, user_id)
+        task = ingest_document_task.delay(saved_path, user_id, file.filename, mime_type)
+    except Exception as e:
+        logger.exception("Storage or task enqueue error: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Upload processing failed",
+        )
 
-    task = ingest_document_task.delay(saved_path, user_id, file.filename, mime_type)
-    
     logger.info(
         "File uploaded: %s (user: %s, task_id: %s)",
         file.filename,

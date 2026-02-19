@@ -45,10 +45,11 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    app.add_middleware(
-        TrustedHostMiddleware,
-        allowed_hosts=settings.allowed_hosts,
-    )
+    if "*" not in settings.allowed_hosts:
+        app.add_middleware(
+            TrustedHostMiddleware,
+            allowed_hosts=settings.allowed_hosts,
+        )
 
     app.include_router(ingest.router, prefix="/api/v1", tags=["ingest"])
     app.include_router(chat.router, prefix="/api/v1", tags=["chat"])

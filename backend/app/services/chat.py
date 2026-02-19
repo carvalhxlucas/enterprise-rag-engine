@@ -79,6 +79,52 @@ class ChatOrchestrator:
 
         return "\n".join(snippets)
 
+    def retrieve_context_list(
+        self, user_id: str, query: str, config: ChatConfig
+    ) -> list[str]:
+        raw = self.retrieve_context(user_id, query, config)
+        if not raw:
+            return []
+        return [s.strip() for s in raw.split("\n") if s.strip()]
+
+    def get_answer_for_eval(
+        self,
+        user_id: str,
+        question: str,
+        config: ChatConfig | None = None,
+        contexts_override: list[str] | None = None,
+    ) -> tuple[str, list[str]]:
+        config = config or ChatConfig(temperature=0.0)
+        contexts = (
+            contexts_override
+            if contexts_override is not None
+            else self.retrieve_context_list(user_id, question, config)
+        )
+        system_prompt = self.build_system_prompt(config)
+        messages: list[dict[str, str]] = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": question},
+        ]
+        if contexts:
+            context_block = "\n".join(contexts)
+            messages.insert(
+                1,
+                {
+                    "role": "system",
+                    "content": f"Use the following context from the user's documents when answering:\n{context_block}",
+                },
+            )
+        response = self.client.chat.completions.create(
+            model=self.model_name,
+            messages=messages,
+            temperature=config.temperature,
+            stream=False,
+        )
+        answer = (
+            response.choices[0].message.content or ""
+        ).strip()
+        return answer, contexts
+
     def stream_chat(self, request: ChatRequest, user_id: str) -> Iterator[str]:
         system_prompt = self.build_system_prompt(request.config)
         context = self.retrieve_context(user_id, request.message, request.config)

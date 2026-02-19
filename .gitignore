@@ -55,6 +55,9 @@ ipython_config.py
 .python-version
 pip-selfcheck.json
 .env
+.env.backend
+.env.frontend
+.env.docker
 .venv
 env/
 venv/

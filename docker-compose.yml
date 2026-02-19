@@ -10,14 +10,33 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:-rag_password}
       POSTGRES_DB: ${DB_NAME:-enterprise_rag}
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-rag_user}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-rag_user} -d postgres"]
       interval: 10s
       timeout: 5s
       retries: 5
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3
+    container_name: enterprise-rag-clickhouse
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-clickhouse}
+    ports:
+      - "8123:8123"
+      - "9001:9000"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8123/ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   qdrant:
     image: qdrant/qdrant:v1.9.0
@@ -27,18 +46,13 @@ services:
       - "6333:6333"
     volumes:
       - qdrant_data:/qdrant/storage
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   redis:
     image: redis:7-alpine
     container_name: enterprise-rag-redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "6378:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -54,8 +68,12 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      clickhouse:
+        condition: service_healthy
     environment:
       DATABASE_URL: postgresql://${DB_USER:-rag_user}:${DB_PASSWORD:-rag_password}@postgres:5432/langfuse
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_MIGRATION_URL: http://clickhouse:8123
       NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET:-change-me}
       ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY:-change-me}
       PORT: 3000
@@ -71,7 +89,7 @@ services:
       postgres:
         condition: service_healthy
       qdrant:
-        condition: service_healthy
+        condition: service_started
       redis:
         condition: service_healthy
       langfuse:
@@ -88,7 +106,7 @@ services:
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
       LANGFUSE_HOST: http://langfuse:3000
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3001,http://localhost:3000}
-      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,backend}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,localhost:8000,127.0.0.1,backend}
     ports:
       - "8000:8000"
     volumes:
@@ -104,7 +122,7 @@ services:
       postgres:
         condition: service_healthy
       qdrant:
-        condition: service_healthy
+        condition: service_started
       redis:
         condition: service_healthy
     environment:
@@ -128,7 +146,7 @@ services:
       backend:
         condition: service_started
     environment:
-      NEXT_PUBLIC_API_BASE_URL: http://backend:8000
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
     ports:
       - "3001:3000"
     volumes:
@@ -138,4 +156,5 @@ volumes:
   postgres_data:
   qdrant_data:
   redis_data:
+  clickhouse_data:
 

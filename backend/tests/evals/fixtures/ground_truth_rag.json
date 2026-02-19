@@ -1,0 +1,27 @@
+[
+  {
+    "question": "What is the main purpose of the Enterprise RAG Engine?",
+    "ground_truth": "The Enterprise RAG Engine is an API that provides retrieval-augmented generation, combining document ingestion, vector search, and LLM-based chat to answer questions from user documents.",
+    "reference_contexts": ["The Enterprise RAG Engine is a FastAPI-based API. It provides retrieval-augmented generation (RAG): document ingestion, vector search in Qdrant, and LLM-based chat to answer questions from the user's ingested documents."]
+  },
+  {
+    "question": "How does the system retrieve context for answering user questions?",
+    "ground_truth": "The system uses vector search over ingested document chunks stored in Qdrant, filtering by user_id, and passes the retrieved snippets as context to the language model.",
+    "reference_contexts": ["Context retrieval: document chunks are stored in Qdrant. The system embeds the user query, runs vector search on the collection with a filter by user_id, and passes the top retrieved snippets as context to the LLM."]
+  },
+  {
+    "question": "Which embedding model is used for indexing documents?",
+    "ground_truth": "The system uses OpenAI text-embedding-3-small for generating embeddings of document chunks.",
+    "reference_contexts": ["Embeddings are generated via OpenAI API using the model text-embedding-3-small. Each document chunk is embedded before being stored in the vector store."]
+  },
+  {
+    "question": "What is the default chat model used for generating answers?",
+    "ground_truth": "The default chat model is GPT-4o-mini, used for generating answers with optional streaming.",
+    "reference_contexts": ["The chat service uses OpenAI GPT-4o-mini as the default model. Responses can be streamed (SSE) or returned in a single completion for evaluation."]
+  },
+  {
+    "question": "What are the two assistant personas available in the chat configuration?",
+    "ground_truth": "The chat supports two personas: technical (precise, rigorous terminology) and sarcastic (accurate but with dry humor and sharp wit).",
+    "reference_contexts": ["ChatConfig supports two personas: 'technical' (precise, rigorous terminology, concise and informative) and 'sarcastic' (accurate answers with dry humor and sharp wit, correctness over jokes)."]
+  }
+]
