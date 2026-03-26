@@ -79,8 +79,13 @@ async def upload_document(
 )
 async def get_ingestion_status(task_id: str) -> IngestionStatusResponse:
     task_result = AsyncResult(task_id, app=celery_app)
-    
-    if task_result.state == "PENDING":
+
+    try:
+        state = task_result.state
+    except Exception:
+        return IngestionStatusResponse(status="unknown", step=None, progress=0, error=None)
+
+    if state == "PENDING":
         return IngestionStatusResponse(
             status="pending",
             step=None,
@@ -88,7 +93,7 @@ async def get_ingestion_status(task_id: str) -> IngestionStatusResponse:
             error=None,
         )
     
-    if task_result.state == "PROCESSING":
+    if state == "PROCESSING":
         meta = task_result.info or {}
         return IngestionStatusResponse(
             status="processing",
@@ -96,30 +101,38 @@ async def get_ingestion_status(task_id: str) -> IngestionStatusResponse:
             progress=meta.get("progress", 0),
             error=None,
         )
-    
-    if task_result.state == "SUCCESS":
+
+    if state == "SUCCESS":
+        result = task_result.result or {}
         return IngestionStatusResponse(
             status="completed",
             step="completed",
             progress=100,
             error=None,
+            document_id=result.get("document_id") if isinstance(result, dict) else None,
         )
-    
-    if task_result.state == "FAILURE":
-        meta = task_result.info or {}
-        error_msg = str(task_result.info) if isinstance(task_result.info, (str, dict)) else "Unknown error"
-        if isinstance(meta, dict) and "error" in meta:
-            error_msg = meta["error"]
+
+    if state == "FAILURE":
+        info = task_result.info
+        if isinstance(info, dict):
+            error_msg = info.get("error", str(info))
+            step = info.get("step", "error")
+        elif isinstance(info, Exception):
+            error_msg = str(info)
+            step = "error"
+        else:
+            error_msg = str(info) if info else "Unknown error"
+            step = "error"
         return IngestionStatusResponse(
             status="failed",
-            step=meta.get("step", "error") if isinstance(meta, dict) else "error",
+            step=step,
             progress=0,
             error=error_msg,
         )
-    
+
     return IngestionStatusResponse(
         status="unknown",
         step=None,
         progress=0,
-        error=f"Unknown task state: {task_result.state}",
+        error=f"Unknown task state: {state}",
     )

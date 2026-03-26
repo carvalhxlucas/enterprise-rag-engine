@@ -22,7 +22,7 @@ async def lifespan(app: FastAPI):
     logger.info("Starting %s", settings.app_name)
     await init_db()
     qdrant_client = get_qdrant_client()
-    logger.info("Qdrant connected to %s", qdrant_client.config.url)
+    logger.info("Qdrant client initialized")
     yield
     if langfuse_client:
         langfuse_client.flush()
@@ -39,7 +39,7 @@ def create_app() -> FastAPI:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[str(origin) for origin in settings.allowed_origins] or ["*"],
+        allow_origins=settings.allowed_origins or ["*"],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

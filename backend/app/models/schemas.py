@@ -13,6 +13,7 @@ class IngestionStatusResponse(BaseModel):
     step: str | None = Field(None, description="Current processing step")
     progress: int = Field(0, ge=0, le=100, description="Progress percentage (0-100)")
     error: str | None = Field(None, description="Error message if status is failed")
+    document_id: str | None = Field(None, description="Document ID, available when status is completed")
 
 
 ChatMessageRole = Literal["user", "assistant", "system"]

@@ -33,8 +33,8 @@ class Settings(BaseSettings):
 
     @computed_field
     @property
-    def allowed_origins(self) -> List[AnyHttpUrl]:
-        return [AnyHttpUrl(u.strip()) for u in self.allowed_origins_raw.split(",") if u.strip()]
+    def allowed_origins(self) -> List[str]:
+        return [u.strip().rstrip("/") for u in self.allowed_origins_raw.split(",") if u.strip()]
 
     @computed_field
     @property

@@ -1,15 +1,16 @@
 import asyncio
 import logging
+import uuid
 from pathlib import Path
 from typing import List, Tuple
 
 from qdrant_client import QdrantClient
 from qdrant_client.http import models as qmodels
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
 from app.config import get_settings
 from app.db.models import Document
-from app.db.session import AsyncSessionLocal
 from app.services.embeddings import EmbeddingService
 from app.utils.chunking import chunk_pages
 from app.utils.text_extraction import extract_docx_text, extract_pdf_text, extract_txt_text
@@ -19,28 +20,43 @@ from app.workers.celery_app import celery_app
 logger = logging.getLogger("enterprise_rag.ingestion")
 
 
+def _make_session_factory():
+    """Create a fresh engine with NullPool to avoid cross-event-loop connection reuse."""
+    settings = get_settings()
+    engine = create_async_engine(settings.database_url, poolclass=NullPool)
+    return async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False), engine
+
+
 async def create_document_record(user_id: str, filename: str, mime_type: str, storage_path: str) -> Document:
-    async with AsyncSessionLocal() as session:  # type: AsyncSession
-        document = Document(
-            user_id=user_id,
-            filename=filename,
-            mime_type=mime_type,
-            storage_path=storage_path,
-        )
-        session.add(document)
-        await session.commit()
-        await session.refresh(document)
-        return document
+    session_factory, engine = _make_session_factory()
+    try:
+        async with session_factory() as session:
+            document = Document(
+                user_id=user_id,
+                filename=filename,
+                mime_type=mime_type,
+                storage_path=storage_path,
+            )
+            session.add(document)
+            await session.commit()
+            await session.refresh(document)
+            return document
+    finally:
+        await engine.dispose()
 
 
 async def update_document_status(document_id, status: str, error_message: str | None = None) -> None:
-    async with AsyncSessionLocal() as session:  # type: AsyncSession
-        document = await session.get(Document, document_id)
-        if document is None:
-            return
-        document.status = status
-        document.error_message = error_message
-        await session.commit()
+    session_factory, engine = _make_session_factory()
+    try:
+        async with session_factory() as session:
+            document = await session.get(Document, document_id)
+            if document is None:
+                return
+            document.status = status
+            document.error_message = error_message
+            await session.commit()
+    finally:
+        await engine.dispose()
 
 
 def build_qdrant_client() -> QdrantClient:
@@ -55,7 +71,7 @@ def ensure_qdrant_collection(client: QdrantClient, vector_size: int) -> None:
         return
     except Exception:
         pass
-    client.recreate_collection(
+    client.create_collection(
         collection_name=collection_name,
         vectors_config=qmodels.VectorParams(size=vector_size, distance=qmodels.Distance.COSINE),
     )
@@ -107,7 +123,7 @@ def ingest_document_task(self, file_path: str, user_id: str, filename: str, mime
         document = asyncio.run(create_document_record(user_id, filename, mime_type, storage_path))
 
         points = []
-        for (page_number, chunk_index, _), vector in zip(page_chunks, vectors):
+        for (page_number, chunk_index, text), vector in zip(page_chunks, vectors):
             payload = {
                 "user_id": user_id,
                 "doc_id": str(document.id),
@@ -115,10 +131,11 @@ def ingest_document_task(self, file_path: str, user_id: str, filename: str, mime
                 "access_level": "admin",
                 "chunk_index": chunk_index,
                 "filename": filename,
+                "text": text,
             }
             points.append(
                 qmodels.PointStruct(
-                    id=None,
+                    id=str(uuid.uuid4()),
                     vector=vector,
                     payload=payload,
                 )
@@ -145,5 +162,4 @@ def ingest_document_task(self, file_path: str, user_id: str, filename: str, mime
                 asyncio.run(update_document_status(document.id, "failed", str(e)))
         except Exception:
             logger.exception("Failed to update document status after error")
-        self.update_state(state="FAILURE", meta={"step": "error", "progress": 0, "error": str(e)})
         raise
